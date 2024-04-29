@@ -37,6 +37,55 @@ class ErrorToken(Token):
     def __str__(self):
         return f"{self.tipo}: - {self.valor} - Columna: {self.fila}, Fila: {self.columna}"
 
+def obtener_tokens(contenido):
+    tokens = []
+    errores = []
+    fila_actual = 1
+    palabra = ''
+    dentro_cadena = False
+    
+    for i, char in enumerate(contenido):
+        if char == '\n':
+            fila_actual += 1
+
+        if char == '"':
+            dentro_cadena = not dentro_cadena
+
+        if char in (' ', '\n') and not dentro_cadena:
+            if palabra:
+                tokens.append(PalabraToken(palabra, fila_actual, i - len(palabra) + 1))
+                palabra = ''
+            continue
+
+        if char in ('%', '*', '#', '@', '/') and not dentro_cadena:
+            errores.append(ErrorToken(f"Error en la fila {fila_actual}: Caracter '{char}' no válido.", fila_actual, i))
+            continue
+
+        palabra += char
+
+    if palabra:
+        tokens.append(PalabraToken(palabra, fila_actual, i - len(palabra) + 1))
+
+    return tokens, errores
+
+
+def ver_tokens(code_area):
+    global archivo_actual
+    if archivo_actual:
+        try:
+            with open(archivo_actual, "r", encoding="utf-8") as file:
+                contenido = file.read()
+        except UnicodeDecodeError:
+            with open(archivo_actual, "r", encoding="latin1") as file:
+                contenido = file.read()
+
+        tokens, errores = obtener_tokens(contenido)
+        reporte_tokens = "\n".join(str(token) for token in tokens)
+        messagebox.showinfo("Tokens", "Reporte de Tokens:\n\n" + reporte_tokens)
+    else:
+        messagebox.showwarning("Advertencia", "No se ha abierto ningún archivo.")
+
+
 def analizador_sintactico(tokens):
     # Diccionario de palabras clave y sus estructuras sintácticas esperadas
     estructuras_sintacticas = {
@@ -92,30 +141,6 @@ def analizador_sintactico(tokens):
             print("El análisis sintáctico fue exitoso.")
         return True
 
-def obtener_tokens(contenido):
-    patron = r'\b\w+\b|[^\s\w]'
-    tokens = []
-    errores = []
-    fila_actual = 1
-    for match in re.finditer(patron, contenido):
-        valor = match.group(0)
-        columna_actual = match.start() - contenido.rfind('\n', 0, match.start()) + 1
-        if columna_actual == 1:
-            fila_actual += 1
-        if valor.isalpha():
-            tokens.append(PalabraToken(valor, fila_actual, columna_actual))
-        elif valor in ["%", "*", "#", "@", "/"] or valor.isdigit():
-            errores.append(ErrorToken(valor, fila_actual, columna_actual))
-        else:
-            tokens.append(SimboloToken(valor, fila_actual, columna_actual))
-    return tokens, errores
-
-def ver_tokens(code_area):
-    contenido = code_area.get("1.0", "end-1c")
-    tokens, errores = obtener_tokens(contenido)
-    reporte_tokens = "\n".join(str(token) for token in tokens)
-    messagebox.showinfo("Tokens", "Reporte de Tokens:\n\n" + reporte_tokens)
-
 def ver_errores(code_area):
     contenido = code_area.get("1.0", "end-1c")
     tokens, errores = obtener_tokens(contenido)
@@ -145,6 +170,7 @@ def abrir_archivo(code_area):
         except UnicodeDecodeError:
             with open(ruta_archivo, "r", encoding="latin1") as file:
                 contenido = file.read()
+
         code_area.delete("1.0", "end")
         code_area.insert("1.0", contenido)
         archivo_actual = ruta_archivo
